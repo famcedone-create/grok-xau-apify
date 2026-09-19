@@ -1,13 +1,26 @@
 import type { ClassifiedPost, RawPost, Side, TpLevel, Bias } from "./types";
 
-const GOLD_MARK =
-  /\b(xauusd[m]?|xau\/usd|xauusdm|\$xau|\$gold|#xauusd|#gold|#xau)\b/i;
+const STRONG_GOLD_MARK =
+  /(?:\b(?:xauusd[m]?|xau\/usd|xauusdm)\b|(?:\$|#)xau(?:usd)?\b)/i;
 const GOLD_WORD = /\bgold\b|\boro\b/i;
+
 const TRADE_WORD =
-  /\b(buy|sell|long|short|entry|tp\d*|take\s*profit|sl\b|stop\s*loss|chiud|compr|vend|target)\b/i;
+  /\b(buy|sell|long|short|entry|tp\d*|take\s*profit|sl\b|stop\s*loss|chiud|compr|vend|target|support|resistance|pips?|scalp(?:ing)?|forex|setup|signal|analysis)\b/i;
+
+const MARKET_CONTEXT =
+  /\b(entry|tp\d*|take\s*profit|sl\b|stop\s*loss|buy\s+zone|sell\s+zone|support|resistance|pips?|scalp(?:ing)?|forex|xau(?:usd)?|target|setup|signal|analysis)\b/i;
+
+const XAU_PRICE_RE =
+  /\b(?:3[5-9]\d{2}|4\d{3}|5[0-4]\d{2})(?:\.\d{1,2})?\b/;
+
+const EXCLUDE_CONTEXT =
+  /\b(usdt|crypto|bitcoin|btc|ethereum|eth|solana|altcoin|token|memecoin|nft|necklace|jewel(?:ry)?|jewellery|diamond|diamonds|watch(?:es)?|marketplace|listed|for\s+sale|want\s+to\s+sell|wts\b|wtb\b|scrap\s+gold|karat|carat|harga|take\s+all|cosmos)\b/i;
 
 const SPAM_HASHTAG =
   /(#gümüş|#platin|#bist100|#gramaltın|#cment|#coti|#g\/usdt)/i;
+
+const SHORT_GOLD_SIGNAL =
+  /^.{0,30}\bgold\s+(buy|sell|long|short)\b.{0,30}$/i;
 
 const BUY_RE =
   /\b(buy\s+now|buy\s+zone|buy\s+side|buy\s+alert|buy\s+gold|buy\s+xau|going\s+long|long\s+now|entry\s+buy|buy\s+entry|buyzone|longs?\b|compro|acquisto|entrata\s+long|#?buy\b|\bbuy\b)/i;
@@ -24,11 +37,17 @@ const TP_NEAR_RE =
 export function isGoldRelated(text: string): boolean {
   const t = text.replace(/\s+/g, " ").trim();
   if (!t) return false;
-  if (SPAM_HASHTAG.test(t) && !/\b(buy|sell|long|short|entry)\b/i.test(t)) {
-    return false;
-  }
-  if (GOLD_MARK.test(t)) return true;
-  return GOLD_WORD.test(t) && TRADE_WORD.test(t);
+
+  if (EXCLUDE_CONTEXT.test(t)) return false;
+  if (SPAM_HASHTAG.test(t)) return false;
+
+  if (STRONG_GOLD_MARK.test(t)) return TRADE_WORD.test(t);
+
+  if (!GOLD_WORD.test(t) || !TRADE_WORD.test(t)) return false;
+  if (XAU_PRICE_RE.test(t)) return true;
+  if (MARKET_CONTEXT.test(t)) return true;
+
+  return t.length <= 90 && SHORT_GOLD_SIGNAL.test(t);
 }
 
 export function extractTps(text: string): number[] {
