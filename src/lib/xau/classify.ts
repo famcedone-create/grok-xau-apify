@@ -22,10 +22,21 @@ const SPAM_HASHTAG =
 const SHORT_GOLD_SIGNAL =
   /^.{0,30}\bgold\s+(buy|sell|long|short)\b.{0,30}$/i;
 
-const BUY_RE =
-  /\b(buy\s+now|buy\s+zone|buy\s+side|buy\s+alert|buy\s+gold|buy\s+xau|going\s+long|long\s+now|entry\s+buy|buy\s+entry|buyzone|longs?\b|compro|acquisto|entrata\s+long|#?buy\b|\bbuy\b)/i;
-const SELL_RE =
-  /\b(sell\s+now|sell\s+zone|sell\s+side|sell\s+alert|sell\s+gold|sell\s+xau|going\s+short|short\s+now|entry\s+sell|sell\s+entry|sellzone|shorts?\b|vendo|vendita|entrata\s+short|#?sell\b|\bsell\b|selll+)/i;
+const BUY_EXPLICIT_RE =
+  /\b(entry\s+buy|buy\s+entry|buy\s+zone|buy\s+limit|buy\s+stop|buy\s+now|going\s+long|long\s+now|entrata\s+long|compro|acquisto)\b/i;
+const SELL_EXPLICIT_RE =
+  /\b(entry\s+sell|sell\s+entry|sell\s+zone|sell\s+limit|sell\s+stop|sell\s+now|going\s+short|short\s+now|entrata\s+short|vendo|vendita)\b/i;
+
+const XAU_BUY_RE =
+  /(?:\b(?:xauusd[m]?|xau\/usd)\b|(?:\$|#)xau(?:usd)?\b).{0,24}\b(?:buy|long)\b|\b(?:buy|long)\b.{0,24}(?:\b(?:xauusd[m]?|xau\/usd)\b|(?:\$|#)xau(?:usd)?\b)/i;
+const XAU_SELL_RE =
+  /(?:\b(?:xauusd[m]?|xau\/usd)\b|(?:\$|#)xau(?:usd)?\b).{0,24}\b(?:sell|short)\b|\b(?:sell|short)\b.{0,24}(?:\b(?:xauusd[m]?|xau\/usd)\b|(?:\$|#)xau(?:usd)?\b)/i;
+
+const GOLD_BUY_RE =
+  /\bgold\b.{0,18}\b(?:buy|long)\b|\b(?:buy|long)\b.{0,18}\bgold\b/i;
+const GOLD_SELL_RE =
+  /\bgold\b.{0,18}\b(?:sell|short)\b|\b(?:sell|short)\b.{0,18}\bgold\b/i;
+
 const EXIT_RE =
   /\b(tp\s*hit|hit\s*tp|tp\s*done|closed|close\s+now|chiud[oa]|booked|breakeven|\bbe\b|sl\s*hit|stop\s*hit|exit\b|pips?\s+profit|profit\s+done|in\s+profit)/i;
 const TP_HIT_RE = /\b(tp\s*[1-6]?\s*(hit|done|✅)|hit\s*tp|tp\s*hit|take[- ]profit.{0,12}(hit|achieved|done))/i;
@@ -65,11 +76,55 @@ export function extractTps(text: string): number[] {
   return [...found].sort((a, b) => a - b).slice(0, 8);
 }
 
+function hasBuySignal(text: string, goldRelated: boolean): boolean {
+  if (!goldRelated) return false;
+
+  if (BUY_EXPLICIT_RE.test(text)) return true;
+  if (XAU_BUY_RE.test(text)) return true;
+
+  const goldDirectional = GOLD_BUY_RE.test(text);
+  if (goldDirectional) {
+    const strongContext =
+      text.length <= 120 ||
+      XAU_PRICE_RE.test(text) ||
+      /\b(entry|zone|tp\d*|take\s*profit|sl\b|stop\s*loss|target|signal)\b/i.test(text);
+    if (strongContext) return true;
+  }
+
+  return (
+    XAU_PRICE_RE.test(text) &&
+    /\b(?:buy|long)\b/i.test(text) &&
+    /\b(entry|zone|tp\d*|sl\b|target)\b/i.test(text)
+  );
+}
+
+function hasSellSignal(text: string, goldRelated: boolean): boolean {
+  if (!goldRelated) return false;
+
+  if (SELL_EXPLICIT_RE.test(text)) return true;
+  if (XAU_SELL_RE.test(text)) return true;
+
+  const goldDirectional = GOLD_SELL_RE.test(text);
+  if (goldDirectional) {
+    const strongContext =
+      text.length <= 120 ||
+      XAU_PRICE_RE.test(text) ||
+      /\b(entry|zone|tp\d*|take\s*profit|sl\b|stop\s*loss|target|signal)\b/i.test(text);
+    if (strongContext) return true;
+  }
+
+  return (
+    XAU_PRICE_RE.test(text) &&
+    /\b(?:sell|short)\b/i.test(text) &&
+    /\b(entry|zone|tp\d*|sl\b|target)\b/i.test(text)
+  );
+}
+
 export function classifyPost(raw: RawPost): ClassifiedPost {
   const text = raw.text ?? "";
   const goldRelated = isGoldRelated(text);
-  const isBuy = goldRelated && BUY_RE.test(text);
-  const isSell = goldRelated && SELL_RE.test(text);
+  const isBuy = hasBuySignal(text, goldRelated);
+  const isSell = hasSellSignal(text, goldRelated);
   const isExit = goldRelated && (EXIT_RE.test(text) || TP_HIT_RE.test(text));
   const tps = goldRelated ? extractTps(text) : [];
   const hasTp = goldRelated && (tps.length > 0 || /\btp\d*\b|take\s*profit/i.test(text));
